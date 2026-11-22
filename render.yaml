@@ -1,0 +1,19 @@
+# Configuration pour Render (https://render.com) : New + → Blueprint, puis choisir ce dépôt GitHub.
+# Render demande alors les valeurs marquées « sync: false ».
+services:
+  - type: web
+    name: pixelopedie
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Adresse de la base PostgreSQL Neon (Neon → Connect → « Connection string »).
+      - key: DATABASE_URL
+        sync: false
+      # Contact envoyé à Wikimedia avec chaque requête, par exemple l'adresse du dépôt GitHub.
+      - key: WIKI_CONTACT
+        sync: false
