@@ -41,7 +41,8 @@ Il interroge Wikipédia doucement pour respecter ses limites. Les cartes génér
 
 Le disque gratuit de Render est effacé à chaque redémarrage. Les comptes et les cartes sont donc gardés dans une base PostgreSQL gratuite chez Neon.
 
-1. **Neon** (<https://neon.com>) : crée un projet, puis *Connect* et copie la « connection string » (elle commence par `postgresql://`).
+1. **Neon** (<https://neon.com>) : crée un projet dans la région *AWS Europe Central 1 (Frankfurt)*, la même que le serveur Render.
+   Puis *Connect* et copie la « connection string » (elle commence par `postgresql://`).
 2. **GitHub** : envoie ce dossier dans un dépôt (privé ou public).
 3. **Render** (<https://render.com>) : *New +* → *Blueprint*, choisis le dépôt. Render lit `render.yaml` et te demande :
    - `DATABASE_URL` : la connection string de Neon ;
