@@ -109,7 +109,9 @@ async function imageHead(card) {
   const data = sctx.getImageData(0, 0, HS, HS).data;
   const px = [];
   for (let i = 0; i < HS * HS; i++) px.push(data[i * 4 + 3] > 40 ? punch([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]) : null);
-  return quantize(px, 9).map(p => (p ? rgb2hex(...p) : null));
+  const out = quantize(px, 9).map(p => (p ? rgb2hex(...p) : null));
+  out.photo = { img, sx, sy, side };
+  return out;
 }
 
 function emojiHead(card) {
@@ -385,6 +387,7 @@ function drawHead(pb, card, head, c) {
     const col = head[y * HS + x];
     if (col && MASKS[shape](x, y)) pb.set(hx + x, hy + y, col);
   }
+  return { hx, hy, shape };
 }
 
 function headwear(pb, card, c) {
@@ -432,10 +435,12 @@ export function renderSprite(card) {
     };
     const pb = new PB(SW, SH);
     drawBody(pb, card, head, c);
-    drawHead(pb, card, head, c);
+    const pos = drawHead(pb, card, head, c);
     headwear(pb, card, c);
     pb.outline(OUTLINE);
-    return pb.toCanvas();
+    const cv = pb.toCanvas();
+    if (head.photo) cv.photo = { ...head.photo, ...pos };
+    return cv;
   })();
   cache.set(card.id, p);
   return p;
@@ -453,6 +458,20 @@ export async function paintSprite(target, card, scale = 3, { flip = false } = {}
   ctx.save();
   if (flip) { ctx.translate(target.width, 0); ctx.scale(-1, 1); }
   ctx.drawImage(src, 0, 0, SW * scale, SH * scale);
+  // La photo de la page reste nette, par-dessus la tête pixelisée.
+  const ph = src.photo;
+  if (ph) {
+    const x = ph.hx * scale, y = ph.hy * scale, s = HS * scale;
+    ctx.save();
+    ctx.beginPath();
+    if (ph.shape === 'square') ctx.rect(x, y, s, s);
+    else ctx.ellipse(x + s / 2, y + s / 2, s / 2 - scale * 0.5, s / 2 - scale * 0.5, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(ph.img, ph.sx, ph.sy, ph.side, ph.side, x, y, s, s);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
