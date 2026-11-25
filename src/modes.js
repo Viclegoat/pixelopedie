@@ -6,14 +6,14 @@ import { BOSS_SLOT_MS, rarityIndex } from '../public/shared/types.js';
 
 // ---------- Boss : un nouveau toutes les 30 minutes ----------
 export const BOSS = {
-  hp:      { commune: 2.4, peu: 2.8, rare: 3.2, epique: 3.6, legendaire: 4.2 },
-  coins:   { commune: 80, peu: 120, rare: 200, epique: 350, legendaire: 600 },
-  drop:    { commune: 0.5, peu: 0.45, rare: 0.4, epique: 0.35, legendaire: 0.3 },
+  hp:      { commune: 2.4, peu: 2.8, rare: 3.2, epique: 3.6, legendaire: 4.2, mythique: 4.8 },
+  coins:   { commune: 80, peu: 120, rare: 200, epique: 350, legendaire: 600, mythique: 900 },
+  drop:    { commune: 0.5, peu: 0.45, rare: 0.4, epique: 0.35, legendaire: 0.3, mythique: 0.25 },
 };
 
 function rollBossRarity(slot) {
   const r = (hashStr('boss' + slot) % 1000) / 1000;
-  return r < 0.30 ? 'commune' : r < 0.55 ? 'peu' : r < 0.77 ? 'rare' : r < 0.92 ? 'epique' : 'legendaire';
+  return r < 0.28 ? 'commune' : r < 0.52 ? 'peu' : r < 0.72 ? 'rare' : r < 0.86 ? 'epique' : r < 0.96 ? 'legendaire' : 'mythique';
 }
 
 let bossPromise = null;

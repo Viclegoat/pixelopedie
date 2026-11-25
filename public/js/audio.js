@@ -333,12 +333,16 @@ const SFX = {
   },
   flip: () => noise({ dur: 0.06, v: 0.12, type: 'bandpass', f: 2500, to: 5000, q: 1.5, r: 0.03 }),
   reveal: ({ rarity = 0 }) => {
-    const sets = [[72], [72, 76], [72, 76, 79], [72, 76, 79, 84], [67, 72, 76, 79, 84, 88, 91, 96]];
+    const sets = [[72], [72, 76], [72, 76, 79], [72, 76, 79, 84], [67, 72, 76, 79, 84, 88, 91, 96], [60, 64, 67, 72, 76, 79, 84, 88, 91, 96, 100]];
     arp(sets[rarity] || sets[0], rarity >= 4 ? 60 : 55, { type: rarity >= 3 ? 'pulse25' : 'triangle', v: rarity >= 3 ? 0.1 : 0.15 }, 40);
     if (rarity >= 3) for (let i = 0; i < 8; i++) tone({ type: 'sine', f: 2000 + R() * 2500, t: now(250 + i * 50), dur: 0.05, v: 0.04 });
     if (rarity >= 4) {
       for (const m of [72, 76, 79, 84]) tone({ type: 'pulse12', f: mtof(m), t: now(520), dur: 0.9, v: 0.06, d: 0.2, s: 0.7, r: 0.4, vib: 0.008 });
       noise({ t: now(500), dur: 0.8, v: 0.04, type: 'highpass', f: 6000, s: 0.4, r: 0.4 });
+    }
+    if (rarity >= 5) { // Mythique : un accord de plus, qui monte encore
+      for (const m of [77, 81, 84, 89]) tone({ type: 'pulse25', f: mtof(m), t: now(1150), dur: 1.1, v: 0.05, d: 0.25, s: 0.7, r: 0.5, vib: 0.01 });
+      tone({ type: 'triangle', f: mtof(53), t: now(1150), dur: 1.2, v: 0.12, d: 0.3, s: 0.6, r: 0.5 });
     }
   },
 

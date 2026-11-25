@@ -53,6 +53,7 @@ export function cardEl(card, { count, onClick, selected, disabled, isNew, scale 
       h('span', { title: 'Points de vie' }, '❤', card.stats.hp), h('span', { title: 'Attaque' }, '⚔', card.stats.atk),
       h('span', { title: 'Défense' }, '🛡', card.stats.def), h('span', { title: 'Vitesse' }, '💨', card.stats.spd)),
   );
+  if (card.lang && card.lang !== 'fr') el.append(h('div', { class: 'lang-badge', title: 'Page de Wikipédia ' + card.lang.toUpperCase() }, card.lang.toUpperCase()));
   if (count) el.append(h('div', { class: 'lvl' }, `Niv.${cardLevel(count)}`));
   if (count > 1) el.append(h('div', { class: 'count' }, `x${count}`));
   if (isNew) el.append(h('div', { class: 'new' }, 'NOUVEAU'));

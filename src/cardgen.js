@@ -1,5 +1,5 @@
 // Transforme une page Wikipédia en carte de combat.
-import { TYPE_IDS, TYPES, rarityFromViews, rarityById, rarityIndex } from '../public/shared/types.js';
+import { TYPE_IDS, TYPES, rarityFromViews, rarityById, rarityIndex, rarityFor } from '../public/shared/types.js';
 import { norm, isBadMoveName } from './filter.js';
 import { pageUrl } from './wiki.js';
 import { aiEnabled, aiDesign } from './ai.js';
@@ -198,7 +198,7 @@ function moveCandidates(page, links, person) {
   const out = [];
   // Lieux de naissance / de décès : peu parlants comme attaques.
   const places = [];
-  const placeRe = /(?:nee?|morte?|decedee?)[^.;]{0,70}?a ([a-z][^,.;()]+)/g;
+  const placeRe = /\b(?:nee?|morte?|decedee?)\b[^.;]{0,70}?\ba ([a-z][^,.;()]+)/g;
   let pm;
   const ex = norm(page.extract || '');
   while ((pm = placeRe.exec(ex))) places.push(pm[1].trim().split(' ').slice(0, 3).join(' '));
@@ -222,6 +222,19 @@ function moveCandidates(page, links, person) {
   return out.filter(c => { const k = norm(c.name); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
+// Remet une carte déjà créée dans la bonne rareté (après un changement de seuils).
+// Les stats gardent leurs proportions et l'attaque signature suit la rareté, comme pour une carte neuve.
+export function reclassify(card) {
+  const next = rarityFor(card.views, card.lang);
+  if (next === card.rarity) return false;
+  const k = rarityById(next).total / rarityById(card.rarity).total;
+  for (const s of ['hp', 'atk', 'def', 'spd']) card.stats[s] = Math.max(1, Math.round(card.stats[s] * k));
+  const sig = card.moves?.[0];
+  if (sig?.power > 0) sig.power = Math.max(40, sig.power + (rarityIndex(next) - rarityIndex(card.rarity)) * 3);
+  card.rarity = next;
+  return true;
+}
+
 export function proceduralMoves(page, type, rarity, links, person) {
   const r = rng(page.title + ':moves');
   const ri = rarityIndex(rarity);
@@ -243,10 +256,13 @@ export function proceduralMoves(page, type, rarity, links, person) {
 }
 
 // ---------- Assemblage ----------
-export async function buildCard(page, links = []) {
+export async function buildCard(rawPage, links = []) {
+  // Page étrangère : on l'analyse avec sa description française (les mots-clés du jeu sont en français).
+  const lang = rawPage.lang || 'fr';
+  const page = lang === 'fr' ? rawPage : { ...rawPage, description: rawPage.frDescription || rawPage.description };
   const type0 = classify(page);
   const person = isPerson(page);
-  const rarity = rarityFromViews(page.views || 0);
+  const rarity = rarityFor(page.views, lang);
 
   let type = type0, look = appearance(page, type0, person), moves = null, source = 'wiki';
   if (aiEnabled()) {
@@ -262,12 +278,14 @@ export async function buildCard(page, links = []) {
   if (!moves) moves = proceduralMoves(page, type, rarity, links, person);
 
   return {
-    id: String(page.pageid),
+    id: lang === 'fr' ? String(page.pageid) : `${lang}:${page.pageid}`,
+    lang,
+    qid: page.qid || null,
     title: page.title,
     description: page.description || '',
     extract: (page.extract || '').slice(0, 700),
     image: page.image || null,
-    url: pageUrl(page.title),
+    url: pageUrl(page.title, lang),
     views: page.views || 0,
     rarity,
     type,

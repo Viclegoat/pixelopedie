@@ -63,7 +63,8 @@ Chez un autre hébergeur, les commandes sont `npm install` puis `npm start`, et 
 | `DATABASE_URL` | Facultatif : base PostgreSQL (Neon…) pour garder comptes et cartes ailleurs que dans `data/db.json` | aucune |
 | `TRUST_PROXY` | À mettre à `1` derrière un proxy (automatique sur Render) | aucun |
 | `WIKI_CONTACT` | Contact envoyé à Wikimedia dans l'en-tête User-Agent (une URL ou une adresse). **Fortement conseillé en ligne** : Wikimedia bride les robots anonymes. | `jeu open source` |
-| `WIKI_GAP_MS` | Délai minimum entre deux requêtes vers Wikipédia | `1100` |
+| `CATALOG_TARGET` | Nombre de cartes que le serveur fabrique d'avance en arrière-plan | `20000` |
+| `WIKI_GAP_MS` | Délai minimum entre deux requêtes vers Wikipédia | `600` |
 | `ANTHROPIC_API_KEY` | Facultatif : si elle est présente, Claude invente les attaques et l'apparence des nouvelles cartes | aucune |
 | `PIXELOPEDIE_MODEL` | Modèle Claude utilisé pour les cartes | `claude-opus-5-5` |
 
@@ -82,13 +83,24 @@ Avec une clé, chaque nouvelle carte coûte un petit appel à l'API. Les cartes 
 |---|---|---|
 | ⚔️ **Normal** | Équipe de 3 cartes de ta collection, contre un joueur en ligne, l'ordinateur ou un ami (code à 4 caractères) | Victoire 60 pièces (30 contre l'ordinateur), défaite 20 (10). Points de classement en ligne (+20 / −15). |
 | 🎴 **Master** | Pas de deck : au début et à chaque K.O., tu ouvres une carte au hasard et tu te bats avec. Le premier à perdre 3 cartes perd. | Le gagnant **garde toutes les cartes ouvertes** pendant le combat, plus un bonus de 20 pièces. |
-| 👹 **Boss** | Seul ou en groupe (jusqu'à 4, avec un code), contre un boss qui change toutes les 30 minutes. Plus la page est rare, plus le boss est solide (PV ×2,4 à ×4,2). Ses PV augmentent avec le nombre de joueurs, et à 3 ou 4 joueurs il attaque deux fois par tour. | 80 à 600 pièces selon la rareté, et 50 à 30 % de chances de gagner la carte du boss. Une seule récompense complète par boss. |
+| 👹 **Boss** | Seul ou en groupe (jusqu'à 4, avec un code), contre un boss qui change toutes les 30 minutes. Plus la page est rare, plus le boss est solide (PV ×2,4 à ×4,8). Ses PV augmentent avec le nombre de joueurs, et à 3 ou 4 joueurs il attaque deux fois par tour. | 80 à 900 pièces selon la rareté, et 50 à 25 % de chances de gagner la carte du boss. Une seule récompense complète par boss. |
 | 🗼 **Tour infinie** | Monte d'étage en étage avec la même équipe. Les gardiens sont plus nombreux et plus rares à chaque étage. Entre deux étages, tes cartes récupèrent 30 % de leurs PV, mais les cartes K.O. le restent. | 10 × le numéro de l'étage, et ton record au classement. |
 | 📅 **Thème du jour** | Chaque jour un thème (Oiseaux, Pilotes de F1, Châteaux de la Loire, Dieux égyptiens…). Seules les cartes de ce thème sont autorisées. | Un pack gratuit de 3 cartes du thème par jour, récompenses ×1,5 et un classement du jour. |
 
 Les packs coûtent 100 pièces. Un pack gratuit est offert toutes les 4 heures, et chaque nouveau joueur reçoit 2 packs de départ et 300 pièces.
-Un pack contient 4 cartes au hasard et 1 carte Rare ou mieux (6 % de chances de Légendaire).
+Un pack contient 4 cartes au hasard et 1 carte Rare ou mieux (25 % d'Épique, 12 % de Légendaire, 3 % de Mythique).
 Avoir une carte en double augmente son niveau : +3 % de stats par exemplaire, jusqu'au niveau 10.
+
+## Toutes les cartes
+
+Chaque page de Wikipédia peut devenir une carte, dans 6 langues : français, anglais, espagnol, allemand, italien et portugais
+(plus de 18 millions de pages). Les cartes étrangères ont un petit badge (EN, ES, DE, IT, PT) et leur description vient de Wikidata, en français.
+La rareté est calculée dans chaque langue : une page anglaise doit être environ 10 fois plus lue qu'une page française pour la même rareté.
+Une même page n'existe qu'une fois : si « Lionel Messi » existe déjà en français, la recherche en espagnol renvoie cette carte.
+Sur l'accueil ou dans l'écran Packs, clique sur une rareté pour voir toutes les cartes déjà créées, ou cherche une page.
+Si elle n'existe pas encore comme carte, la recherche la crée tout de suite depuis Wikipédia.
+En arrière-plan, le serveur fabrique des cartes en continu (les pages les plus lues de l'année, puis les pages qu'elles citent, puis des pages au hasard),
+jusqu'à 20 000 cartes (`CATALOG_TARGET`).
 
 ## Règles de combat
 
@@ -105,9 +117,10 @@ Avoir une carte en double augmente son niveau : +3 % de stats par exemplaire, ju
 |---|---|---|
 | ★ Commune | moins de 5 000 | base |
 | ★★ Peu commune | 5 000+ | +12 % |
-| ★★★ Rare | 40 000+ | +25 % |
-| ★★★★ Épique | 250 000+ | +40 % |
-| ★★★★★ Légendaire | 1 000 000+ | +57 % |
+| ★★★ Rare | 30 000+ | +25 % |
+| ★★★★ Épique | 100 000+ | +40 % |
+| ★★★★★ Légendaire | 300 000+ (des milliers de pages) | +57 % |
+| ★★★★★★ Mythique | 1 000 000+ (France, Paris, les plus grandes stars…) | +77 % |
 
 ### Table des types (super efficace ×2, et ×0,5 dans l'autre sens)
 
@@ -145,7 +158,7 @@ Le bouton 🔊 en bas à droite règle la musique et les effets, ou coupe le son
 
 Les pages au contenu sensible ne sortent **jamais** des packs : sexualité, attentats, génocides, victimes, crimes, etc.
 Les noms d'attaques sont aussi filtrés : jamais de religion, d'origine, de handicap ou de mort utilisés comme « attaque ».
-Les listes sont dans `src/filter.js`.
+Le filtre couvre les 6 langues. Les listes sont dans `src/filter.js`.
 
 ## Organisation du code
 

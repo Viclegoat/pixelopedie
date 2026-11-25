@@ -61,6 +61,9 @@ export async function usePostgres(query) {
   console.log(`[db] PostgreSQL : ${Object.keys(db.users).length} joueurs et ${Object.keys(db.cards).length} cartes chargés.`);
 }
 
+// Les cartes ne sont réécrites dans PostgreSQL que si on le demande (elles changent très rarement).
+export function cardChanged(id) { written.delete('card:' + id); }
+
 let timer = null;
 export function save() {
   if (timer) return;

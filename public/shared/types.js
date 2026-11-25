@@ -40,11 +40,27 @@ export function effectiveness(atkType, defType) {
 export const RARITIES = [
   { id: 'commune',    name: 'Commune',     color: '#9aa0a6', total: 300, minViews: 0 },
   { id: 'peu',        name: 'Peu commune', color: '#4caf50', total: 335, minViews: 5000 },
-  { id: 'rare',       name: 'Rare',        color: '#2f80ed', total: 375, minViews: 40000 },
-  { id: 'epique',     name: 'Épique',      color: '#a259ff', total: 420, minViews: 250000 },
-  { id: 'legendaire', name: 'Légendaire',  color: '#f2a900', total: 470, minViews: 1000000 },
+  { id: 'rare',       name: 'Rare',        color: '#2f80ed', total: 375, minViews: 30000 },
+  { id: 'epique',     name: 'Épique',      color: '#a259ff', total: 420, minViews: 100000 },
+  // Plusieurs milliers de pages de Wikipédia FR dépassent 300 000 vues par an.
+  { id: 'legendaire', name: 'Légendaire',  color: '#f2a900', total: 470, minViews: 300000 },
+  // Les pages vedettes : plus d'un million de vues par an (France, Paris, les grandes stars…).
+  { id: 'mythique',   name: 'Mythique',    color: '#ff4fd8', total: 530, minViews: 1000000 },
 ];
 export const RARITY_IDS = RARITIES.map(r => r.id);
+
+// Wikipédias utilisées. « size » : nombre de vues comparé à Wikipédia FR, pour que la rareté
+// reste juste dans chaque langue (une page anglaise doit être ~10 fois plus lue pour la même rareté).
+export const LANGS = {
+  fr: { name: 'Français', code: 'FR', size: 1, weight: 0.4 },
+  en: { name: 'English', code: 'EN', size: 10, weight: 0.2 },
+  es: { name: 'Español', code: 'ES', size: 1.15, weight: 0.1 },
+  de: { name: 'Deutsch', code: 'DE', size: 1.2, weight: 0.1 },
+  it: { name: 'Italiano', code: 'IT', size: 0.65, weight: 0.1 },
+  pt: { name: 'Português', code: 'PT', size: 0.45, weight: 0.1 },
+};
+export const LANG_IDS = Object.keys(LANGS);
+export const rarityFor = (views, lang = 'fr') => rarityFromViews((views || 0) / (LANGS[lang]?.size || 1));
 export const rarityById = id => RARITIES.find(r => r.id === id) || RARITIES[0];
 export const rarityIndex = id => Math.max(0, RARITY_IDS.indexOf(id));
 

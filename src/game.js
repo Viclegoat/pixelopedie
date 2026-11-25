@@ -46,7 +46,7 @@ function averageRarity(fighters) {
 async function botTeam(rarity, size = TEAM_SIZE, statMult = 1) {
   const out = [];
   for (let i = 0; i < size; i++) {
-    const r = RARITY_IDS[Math.max(0, Math.min(4, rarityIndex(rarity) + (Math.random() < 0.3 ? -1 : 0)))];
+    const r = RARITY_IDS[Math.max(0, Math.min(RARITY_IDS.length - 1, rarityIndex(rarity) + (Math.random() < 0.3 ? -1 : 0)))];
     const card = await drawRarity(r);
     if (card) out.push(makeFighter(card, { statMult }));
   }
@@ -202,7 +202,7 @@ async function botOpponent(mode, fighters) {
 // ---------- Tour infinie ----------
 function floorSpec(floor) {
   const size = floor < 3 ? 1 : floor < 7 ? 2 : 3;
-  const ri = Math.min(4, Math.floor((floor - 1) / 3));
+  const ri = Math.min(RARITY_IDS.length - 1, Math.floor((floor - 1) / 3));
   const statMult = 1 + Math.max(0, floor - 13) * 0.05;
   return { size, rarity: RARITY_IDS[ri], statMult };
 }

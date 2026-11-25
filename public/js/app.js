@@ -1,5 +1,5 @@
 // Pixelopédie — application du navigateur.
-import { TYPES, TYPE_IDS, RARITIES, rarityIndex, MODES, PACK_PRICE, TEAM_SIZE, cardLevel, STRONG } from '/shared/types.js';
+import { TYPES, TYPE_IDS, RARITIES, rarityIndex, MODES, PACK_PRICE, TEAM_SIZE, cardLevel, STRONG, LANGS, LANG_IDS } from '/shared/types.js';
 import { h, $, toast, modal, cardEl, cardDetail, typeBadge, rarityStars, countdown, fmt } from './ui.js';
 import { spriteCanvas } from './sprite.js';
 import { mountBattle } from './battleview.js';
@@ -293,7 +293,10 @@ async function revealCards(stage, pack, hint, cards) {
       flipped++;
       sfx('flip');
       sfx('reveal', { rarity: rarityIndex(card.rarity) });
-      if (card.rarity === 'legendaire') { const fl = h('div', { class: 'flash' }); document.body.append(fl); setTimeout(() => fl.remove(), 700); toast(`LÉGENDAIRE : ${card.title} !`); }
+      if (card.rarity === 'legendaire' || card.rarity === 'mythique') {
+        const fl = h('div', { class: 'flash' + (card.rarity === 'mythique' ? ' mythic' : '') }); document.body.append(fl); setTimeout(() => fl.remove(), 900);
+        toast(`${card.rarity === 'mythique' ? 'MYTHIQUE' : 'LÉGENDAIRE'} : ${card.title} !`);
+      }
       if (flipped === sorted.length) { all.remove(); }
     });
     row.append(f);
@@ -303,27 +306,54 @@ async function revealCards(stage, pack, hint, cards) {
 
 // --- Toutes les cartes (par rareté, avec recherche) ---
 SCREENS.catalog = (body, params = {}) => {
-  let rarity = params.rarity || '', offset = 0, seq = 0, timer = null;
+  let rarity = params.rarity || '', offset = 0, seq = 0, timer = null, wikiTimer = null, wikiSeq = 0, shown = new Set();
   const wrap = h('div', { class: 'wrap' });
-  const search = h('input', { class: 'search-input', placeholder: 'Rechercher une carte (nom ou description)…', 'aria-label': 'Rechercher une carte' });
+  const search = h('input', { class: 'search-input', placeholder: 'Rechercher une page Wikipédia…', 'aria-label': 'Rechercher une carte' });
   search.value = params.q || '';
   const tabs = h('div', { class: 'rarity-strip' });
+  const langSel = h('select', { 'aria-label': 'Langue' }, h('option', { value: '' }, '🌍 Toutes les langues'),
+    LANG_IDS.map(l => h('option', { value: l }, `${LANGS[l].code} · ${LANGS[l].name}`)));
+  langSel.value = params.lang || '';
+  langSel.onchange = () => { load(); if (search.value.trim().length >= 3) wikiSearch(); };
   const info = h('p', { class: 'muted' });
   const grid = h('div', { class: 'cards' });
   const more = h('button', { class: 'btn hidden', onclick: () => load(true) }, 'Voir plus');
+  const wikiBox = h('div', { class: 'wiki-box hidden' });
+  // Les pages pas encore transformées en cartes : on les cherche directement sur Wikipédia.
+  async function wikiSearch() {
+    const q = search.value.trim(), my = ++wikiSeq;
+    if (q.length < 3) return wikiBox.classList.add('hidden');
+    wikiBox.classList.remove('hidden');
+    const where = `Wikipédia ${LANGS[langSel.value || 'fr'].code}`;
+    wikiBox.replaceChildren(h('h3', {}, `🔎 Dans tout ${where}`), h('div', { class: 'empty dots' }, `Recherche de « ${q} » sur ${where}`));
+    let data;
+    try { data = await api('/catalog/wiki', { q, lang: langSel.value || 'fr' }); }
+    catch (e) { if (my === wikiSeq) wikiBox.replaceChildren(h('h3', {}, `🔎 Dans tout ${where}`), h('div', { class: 'empty' }, e.message)); return; }
+    if (my !== wikiSeq) return;
+    if (data.added) await load(); // de nouvelles cartes existent : les onglets et la liste se mettent à jour
+    const rest = data.items.filter(x => !shown.has(x.card.id) && !shown.has('w:' + x.card.id) && shown.add('w:' + x.card.id));
+    wikiBox.replaceChildren(h('h3', {}, `🔎 Dans tout ${where}`),
+      h('p', { class: 'muted' }, data.added ? `${data.added} nouvelle${data.added > 1 ? 's' : ''} carte${data.added > 1 ? 's' : ''} ajoutée${data.added > 1 ? 's' : ''} au jeu grâce à ta recherche.` : 'Les pages qui correspondent sur Wikipédia :'),
+      rest.length ? h('div', { class: 'cards' }, rest.map(({ card, count }) => {
+        const el = cardEl(card, { count, onClick: () => cardDetail(card, count) });
+        if (!count) { el.classList.add('unowned'); el.append(h('div', { class: 'not-mine' }, 'PAS À TOI')); }
+        return el;
+      })) : h('div', { class: 'empty' }, data.items.length ? 'Toutes les pages trouvées sont déjà affichées au-dessus.' : 'Aucune page jouable trouvée (les pages sensibles sont exclues).'));
+  }
   const tab = (id, label, color, n, mine) => h('button', { class: 'btn small rarity-btn' + (rarity === id ? ' active' : ''), style: color ? { '--rc': color } : {},
     onclick: () => { rarity = id; load(); } }, label, h('span', { class: 'tab-count' }, ` ${mine}/${n}`));
   async function load(append = false) {
     const my = ++seq;
     if (!append) { offset = 0; grid.replaceChildren(h('div', { class: 'empty dots' }, 'Chargement')); }
     let data;
-    try { data = await api(`/catalog?rarity=${encodeURIComponent(rarity)}&q=${encodeURIComponent(search.value.trim())}&offset=${offset}`); }
+    try { data = await api(`/catalog?rarity=${encodeURIComponent(rarity)}&lang=${langSel.value}&q=${encodeURIComponent(search.value.trim())}&offset=${offset}`); }
     catch (e) { if (my === seq) grid.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
     if (my !== seq) return; // une recherche plus récente est partie entre-temps
     const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
     tabs.replaceChildren(tab('', 'Toutes', null, sum(data.counts), sum(data.owned)),
       ...RARITIES.map(r => tab(r.id, `${'★'.repeat(rarityIndex(r.id) + 1)} ${r.name}`, r.color, data.counts[r.id] || 0, data.owned[r.id] || 0)));
-    if (!append) grid.replaceChildren();
+    if (!append) { grid.replaceChildren(); shown = new Set(); }
+    data.items.forEach(x => shown.add(x.card.id));
     grid.append(...data.items.map(({ card, count }) => {
       const el = cardEl(card, { count, onClick: () => cardDetail(card, count) });
       if (!count) { el.classList.add('unowned'); el.append(h('div', { class: 'not-mine' }, 'PAS À TOI')); }
@@ -332,16 +362,20 @@ SCREENS.catalog = (body, params = {}) => {
     offset += data.items.length;
     const r = RARITIES.find(x => x.id === rarity);
     const q = search.value.trim();
-    info.textContent = `${data.total} carte${data.total > 1 ? 's' : ''}${r ? ` « ${r.name} »` : ''}${q ? ` pour « ${q} »` : ''}, des plus lues aux moins lues. Les cartes grisées ne sont pas encore dans ta collection.`;
+    info.textContent = `${data.total} carte${data.total > 1 ? 's' : ''}${r ? ` « ${r.name} »` : ''}${q ? ` pour « ${q} »` : ''}, des plus lues aux moins lues, parmi ${fmt(data.known)} cartes déjà créées. Toute page de Wikipédia (en 6 langues) peut devenir une carte : cherche-la ! Les cartes grisées ne sont pas encore à toi.`;
     if (!data.total) grid.replaceChildren(h('div', { class: 'empty' }, q ? `Aucune carte ne correspond à « ${q} »${r && sum(data.counts) ? ' dans cette rareté : regarde les autres onglets' : ''}.` : 'Aucune carte de cette rareté pour l’instant : le serveur en génère au fil des packs.'));
     more.classList.toggle('hidden', offset >= data.total);
   }
-  search.oninput = () => { clearTimeout(timer); timer = setTimeout(() => load(), 250); };
+  search.oninput = () => {
+    clearTimeout(timer); timer = setTimeout(() => load(), 250);
+    clearTimeout(wikiTimer); wikiTimer = setTimeout(wikiSearch, 900);
+  };
+  search.onkeydown = e => { if (e.key === 'Enter') { clearTimeout(wikiTimer); wikiSearch(); } };
   wrap.append(h('div', { class: 'row' }, h('h2', { style: { margin: 0 } }, 'Toutes les cartes'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn small', onclick: () => go('collection') }, 'Ma collection')),
-    h('div', { class: 'filters' }, search), tabs, info, grid, h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '16px' } }, more));
+    h('div', { class: 'filters' }, search, langSel), tabs, info, grid, h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '16px' } }, more), wikiBox);
   body.append(wrap);
-  load();
+  load().then(() => { if (search.value.trim().length >= 3) wikiSearch(); });
   if (params.q != null) search.focus();
 };
 

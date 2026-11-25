@@ -113,7 +113,7 @@ input.field:focus { border-color: var(--cyan); }
 .card .lvl { position: absolute; top: 4px; right: 6px; font-family: var(--pixel); font-size: 8px; background: var(--outline); padding: 3px 4px; }
 .card .count { position: absolute; top: 4px; left: 6px; font-family: var(--pixel); font-size: 8px; background: var(--outline); padding: 3px 4px; color: var(--gold); }
 .card .new { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: var(--pink); font-family: var(--pixel); font-size: 8px; padding: 3px 5px; border: 2px solid var(--outline); }
-.r-commune { --r: #9aa0a6; } .r-peu { --r: #4caf50; } .r-rare { --r: #2f80ed; } .r-epique { --r: #a259ff; } .r-legendaire { --r: #f2a900; }
+.r-commune { --r: #9aa0a6; } .r-peu { --r: #4caf50; } .r-rare { --r: #2f80ed; } .r-epique { --r: #a259ff; } .r-legendaire { --r: #f2a900; } .r-mythique { --r: #ff4fd8; }
 .card.r-legendaire { background: linear-gradient(180deg, #4a3a0e, var(--panel)); }
 .card.r-epique { background: linear-gradient(180deg, #33204e, var(--panel)); }
 .card.r-legendaire::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 30%, rgba(255,240,180,.18) 45%, transparent 60%); background-size: 250% 100%; animation: shine 3s linear infinite; pointer-events: none; }
@@ -164,6 +164,7 @@ input.field:focus { border-color: var(--cyan); }
 .flip .back { position: absolute; inset: 0; background: repeating-linear-gradient(45deg, #2c2347 0 8px, #241c3b 8px 16px); border: 3px solid var(--outline); box-shadow: inset 0 0 0 3px var(--line); display: flex; align-items: center; justify-content: center; font-size: 40px; }
 .flip .front { transform: rotateY(180deg); }
 .flip.on.glow-legendaire .front .card { animation: legend 1.2s ease-out; }
+.flip.on.glow-mythique .front .card { animation: mythic 1.6s ease-out; }
 .flip.on.glow-epique .front .card { animation: epic 1s ease-out; }
 @keyframes legend { 0% { box-shadow: 0 0 0 0 #f2a900, inset 0 0 0 3px var(--r); } 40% { box-shadow: 0 0 60px 20px #f2a900, inset 0 0 0 3px var(--r); } }
 @keyframes epic { 0% { box-shadow: 0 0 0 0 #a259ff, inset 0 0 0 3px var(--r); } 40% { box-shadow: 0 0 40px 12px #a259ff, inset 0 0 0 3px var(--r); } }
@@ -287,3 +288,14 @@ input.field:focus { border-color: var(--cyan); }
 .filters .search-input { width: 100%; max-width: none; }
 .card.unowned .art, .card.unowned .name { filter: grayscale(.85) brightness(.75); }
 .card .not-mine { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); white-space: nowrap; border: 2px solid var(--line); font-family: var(--pixel); font-size: 7px; background: var(--outline); color: var(--muted); padding: 3px 4px; }
+
+/* ---------- Mythique ---------- */
+.card.r-mythique { background: linear-gradient(180deg, #4d1645, #1f2a5c 70%, var(--panel)); }
+.card.r-mythique::after { content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(115deg, transparent 25%, rgba(255,90,90,.18) 35%, rgba(255,230,90,.18) 42%, rgba(90,255,160,.18) 49%, rgba(90,180,255,.2) 56%, rgba(220,110,255,.18) 63%, transparent 73%);
+  background-size: 250% 100%; animation: shine 2.4s linear infinite; }
+.card.r-mythique .rar { background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bff9e, #6bc5ff, #d36bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@keyframes mythic { 0% { box-shadow: 0 0 0 0 #ff4fd8, inset 0 0 0 3px var(--r); } 30% { box-shadow: 0 0 70px 26px #ff4fd8, inset 0 0 0 3px var(--r); } 60% { box-shadow: 0 0 60px 20px #6bc5ff, inset 0 0 0 3px var(--r); } }
+.flash.mythic { background: radial-gradient(circle, #fff 0%, #ffc6f3 45%, #b9dcff 100%); }
+.wiki-box { margin-top: 28px; padding-top: 12px; border-top: 3px dashed var(--line); }
+.card .lang-badge { position: absolute; left: 6px; top: 34px; font-family: var(--pixel); font-size: 7px; background: var(--cyan); color: var(--outline); padding: 2px 3px; border: 2px solid var(--outline); }
