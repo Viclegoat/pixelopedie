@@ -207,6 +207,16 @@ SCREENS.home = async body => {
     tile('theme', MODES.theme.emoji, 'Thème du jour', themeInfo, () => go('duel', { mode: 'theme' })),
     tile('', '🏆', 'Classements', `Classement : ${p.stats.rating} pts · ${p.stats.wins} victoires`, () => go('leaderboard')),
   ));
+  const homeSearch = h('input', { class: 'search-input', placeholder: 'Rechercher une carte…', 'aria-label': 'Rechercher une carte' });
+  homeSearch.onkeydown = e => { if (e.key === 'Enter') go('catalog', { q: homeSearch.value.trim() }); };
+  wrap.append(h('div', { class: 'section-title' }, h('h2', { style: { margin: 0 } }, 'Toutes les cartes')),
+    h('p', { class: 'muted' }, 'Clique sur une rareté pour voir toutes les cartes du jeu, ou cherche une page précise.'),
+    h('div', { class: 'rarity-strip' },
+      RARITIES.map(r => h('button', { class: 'btn small rarity-btn', style: { '--rc': r.color }, onclick: () => go('catalog', { rarity: r.id }) },
+        '★'.repeat(rarityIndex(r.id) + 1), ' ', r.name)),
+      h('button', { class: 'btn small', onclick: () => go('catalog', {}) }, 'Toutes')),
+    h('div', { class: 'row', style: { marginTop: '10px' } }, homeSearch,
+      h('button', { class: 'btn small primary', onclick: () => go('catalog', { q: homeSearch.value.trim() }) }, 'Chercher')));
   wrap.append(h('div', { class: 'section-title' }, h('h2', { style: { margin: 0 } }, 'Les types')),
     h('p', { class: 'muted' }, 'Chaque carte a un type selon le sujet de sa page. Un type est super efficace (×2) contre deux autres :'),
     h('div', { class: 'legend-types' }, TYPE_IDS.map(t => h('span', { class: 'chip', style: { fontSize: '17px' } }, typeBadge(t), ' bat ', STRONG[t].map(x => TYPES[x].emoji).join(' ')))));
@@ -232,8 +242,10 @@ SCREENS.packs = body => {
     h('div', { class: 'hub' }, opts.map(([kind, emoji, title, sub, ok]) => h('div', { class: 'panel tile' + (ok ? '' : ' disabled'), style: ok ? {} : { opacity: .5 }, onclick: () => ok && openPack(kind) },
       h('div', { class: 'emoji' }, emoji), h('h3', {}, title), h('p', {}, sub)))),
     h('h3', { style: { marginTop: '24px' } }, 'Raretés'),
-    h('div', { class: 'list' }, RARITIES.map(r => h('div', { class: 'li' }, h('span', { style: { color: r.color } }, '★'.repeat(rarityIndex(r.id) + 1), ' ', r.name),
-      h('span', { class: 'muted' }, r.minViews ? `≥ ${fmt(r.minViews)} vues / an` : 'moins de 5 000 vues / an')))),
+    h('p', { class: 'muted' }, 'Clique sur une rareté pour voir toutes ses cartes.'),
+    h('div', { class: 'list' }, RARITIES.map(r => h('button', { class: 'li li-link', onclick: () => go('catalog', { rarity: r.id }) },
+      h('span', { style: { color: r.color } }, '★'.repeat(rarityIndex(r.id) + 1), ' ', r.name),
+      h('span', { class: 'muted' }, r.minViews ? `≥ ${fmt(r.minViews)} vues / an` : 'moins de 5 000 vues / an', ' ›')))),
   );
   body.append(wrap);
 };
@@ -288,6 +300,50 @@ async function revealCards(stage, pack, hint, cards) {
   });
   stage.append(row, h('div', { class: 'row' }, all, done));
 }
+
+// --- Toutes les cartes (par rareté, avec recherche) ---
+SCREENS.catalog = (body, params = {}) => {
+  let rarity = params.rarity || '', offset = 0, seq = 0, timer = null;
+  const wrap = h('div', { class: 'wrap' });
+  const search = h('input', { class: 'search-input', placeholder: 'Rechercher une carte (nom ou description)…', 'aria-label': 'Rechercher une carte' });
+  search.value = params.q || '';
+  const tabs = h('div', { class: 'rarity-strip' });
+  const info = h('p', { class: 'muted' });
+  const grid = h('div', { class: 'cards' });
+  const more = h('button', { class: 'btn hidden', onclick: () => load(true) }, 'Voir plus');
+  const tab = (id, label, color, n, mine) => h('button', { class: 'btn small rarity-btn' + (rarity === id ? ' active' : ''), style: color ? { '--rc': color } : {},
+    onclick: () => { rarity = id; load(); } }, label, h('span', { class: 'tab-count' }, ` ${mine}/${n}`));
+  async function load(append = false) {
+    const my = ++seq;
+    if (!append) { offset = 0; grid.replaceChildren(h('div', { class: 'empty dots' }, 'Chargement')); }
+    let data;
+    try { data = await api(`/catalog?rarity=${encodeURIComponent(rarity)}&q=${encodeURIComponent(search.value.trim())}&offset=${offset}`); }
+    catch (e) { if (my === seq) grid.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
+    if (my !== seq) return; // une recherche plus récente est partie entre-temps
+    const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+    tabs.replaceChildren(tab('', 'Toutes', null, sum(data.counts), sum(data.owned)),
+      ...RARITIES.map(r => tab(r.id, `${'★'.repeat(rarityIndex(r.id) + 1)} ${r.name}`, r.color, data.counts[r.id] || 0, data.owned[r.id] || 0)));
+    if (!append) grid.replaceChildren();
+    grid.append(...data.items.map(({ card, count }) => {
+      const el = cardEl(card, { count, onClick: () => cardDetail(card, count) });
+      if (!count) { el.classList.add('unowned'); el.append(h('div', { class: 'not-mine' }, 'PAS À TOI')); }
+      return el;
+    }));
+    offset += data.items.length;
+    const r = RARITIES.find(x => x.id === rarity);
+    const q = search.value.trim();
+    info.textContent = `${data.total} carte${data.total > 1 ? 's' : ''}${r ? ` « ${r.name} »` : ''}${q ? ` pour « ${q} »` : ''}, des plus lues aux moins lues. Les cartes grisées ne sont pas encore dans ta collection.`;
+    if (!data.total) grid.replaceChildren(h('div', { class: 'empty' }, q ? `Aucune carte ne correspond à « ${q} »${r && sum(data.counts) ? ' dans cette rareté : regarde les autres onglets' : ''}.` : 'Aucune carte de cette rareté pour l’instant : le serveur en génère au fil des packs.'));
+    more.classList.toggle('hidden', offset >= data.total);
+  }
+  search.oninput = () => { clearTimeout(timer); timer = setTimeout(() => load(), 250); };
+  wrap.append(h('div', { class: 'row' }, h('h2', { style: { margin: 0 } }, 'Toutes les cartes'), h('span', { class: 'spacer' }),
+      h('button', { class: 'btn small', onclick: () => go('collection') }, 'Ma collection')),
+    h('div', { class: 'filters' }, search), tabs, info, grid, h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '16px' } }, more));
+  body.append(wrap);
+  load();
+  if (params.q != null) search.focus();
+};
 
 // --- Collection ---
 SCREENS.collection = async body => {

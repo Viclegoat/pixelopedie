@@ -84,6 +84,26 @@ app.get('/api/card/:id', wrap(async req => {
   return card;
 }));
 
+// Toutes les cartes du jeu, par rareté, avec recherche (accents et majuscules ignorés).
+const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+app.get('/api/catalog', auth, wrap(async req => {
+  const rarity = String(req.query.rarity || '');
+  const q = fold(req.query.q).trim().slice(0, 60);
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const limit = Math.min(60, Math.max(1, parseInt(req.query.limit, 10) || 48));
+  // Les compteurs par rareté portent sur la recherche en cours : on voit dans quelle rareté sont les résultats.
+  const found = Object.values(db.cards).filter(c => !q || fold(c.title).includes(q) || fold(c.description).includes(q));
+  const counts = {}, owned = {};
+  for (const c of found) {
+    counts[c.rarity] = (counts[c.rarity] || 0) + 1;
+    if (req.user.collection[c.id]) owned[c.rarity] = (owned[c.rarity] || 0) + 1;
+  }
+  const list = found.filter(c => !rarity || c.rarity === rarity)
+    .sort((a, b) => (q ? (fold(b.title).startsWith(q) - fold(a.title).startsWith(q)) : 0) || (b.views || 0) - (a.views || 0));
+  const items = list.slice(offset, offset + limit).map(({ categories, ...card }) => ({ card, count: req.user.collection[card.id]?.count || 0 }));
+  return { total: list.length, counts, owned, items };
+}));
+
 const opening = new Set();
 app.post('/api/pack/open', auth, wrap(async req => {
   const user = req.user;
