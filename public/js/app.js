@@ -3,6 +3,7 @@ import { TYPES, TYPE_IDS, RARITIES, rarityIndex, MODES, PACK_PRICE, TEAM_SIZE, c
 import { h, $, toast, modal, cardEl, cardDetail, typeBadge, rarityStars, countdown, fmt } from './ui.js';
 import { spriteCanvas } from './sprite.js';
 import { mountBattle } from './battleview.js';
+import { marketScreen } from './market.js';
 import { music, sfx, settings, setVolume, setMuted } from './audio.js';
 
 const app = document.getElementById('app');
@@ -136,6 +137,7 @@ function topbar() {
     h('span', { class: 'chip coin', title: 'Pièces' }, '🪙 ', fmt(p.coins)),
     h('span', { class: 'chip', title: 'Cartes différentes' }, '🃏 ', p.cardCount),
     h('button', { class: 'btn small', onclick: () => go('collection') }, 'Collection'),
+    h('button', { class: 'btn small cyan', onclick: () => go('market') }, 'Marché'),
     h('button', { class: 'btn small gold', onclick: () => go('packs') }, 'Packs' + (p.starterPacks > 0 || Date.now() > p.freePackAt ? ' !' : '')),
     h('span', { class: 'who' }, p.name),
     h('button', { class: 'btn small ghost', onclick: logout, title: 'Se déconnecter' }, '⏻'),
@@ -205,6 +207,7 @@ SCREENS.home = async body => {
     tile('boss', MODES.boss.emoji, 'Mode Boss', bossInfo, () => go('boss')),
     tile('tower', MODES.tower.emoji, 'Tour infinie', `${MODES.tower.desc} Ton record : étage ${p.stats.towerBest}.`, () => go('tower')),
     tile('theme', MODES.theme.emoji, 'Thème du jour', themeInfo, () => go('duel', { mode: 'theme' })),
+    tile('', '🏪', 'Marché & échanges', 'Vends tes cartes, enchéris et échange avec les autres joueurs.', () => go('market')),
     tile('', '🏆', 'Classements', `Classement : ${p.stats.rating} pts · ${p.stats.wins} victoires`, () => go('leaderboard')),
   ));
   const homeSearch = h('input', { class: 'search-input', placeholder: 'Rechercher une carte…', 'aria-label': 'Rechercher une carte' });
@@ -378,6 +381,8 @@ SCREENS.catalog = (body, params = {}) => {
   load().then(() => { if (search.value.trim().length >= 3) wikiSearch(); });
   if (params.q != null) search.focus();
 };
+
+SCREENS.market = (body, params) => marketScreen(body, params, { api, state, go, renderTop, refreshCollection });
 
 // --- Collection ---
 SCREENS.collection = async body => {

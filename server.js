@@ -10,6 +10,7 @@ import { startPool, openPack, poolStatus, themeCards, searchCards, catalogInfo }
 import { attach, openLobbies, queueSizes } from './src/game.js';
 import { currentBoss, todayTheme, themeEligible, BOSS } from './src/modes.js';
 import { aiEnabled } from './src/ai.js';
+import * as market from './src/market.js';
 import { UA } from './src/wiki.js';
 import { PACK_PRICE, FREE_PACK_HOURS, LANGS } from './public/shared/types.js';
 
@@ -153,6 +154,19 @@ app.post('/api/pack/open', auth, wrap(async req => {
     opening.delete(user.id);
   }
 }));
+
+// ---------- Marché, enchères, échanges ----------
+const done = req => ({ ok: true, profile: publicProfile(req.user) });
+app.get('/api/market', auth, wrap(async req => market.marketView(req.user)));
+app.post('/api/market/list', auth, wrap(async req => { market.listCard(req.user, String(req.body.cardId), req.body.price); return done(req); }));
+app.post('/api/market/buy', auth, wrap(async req => { market.buyListing(req.user, String(req.body.id)); return done(req); }));
+app.post('/api/market/cancel', auth, wrap(async req => { market.cancelListing(req.user, String(req.body.id)); return done(req); }));
+app.post('/api/auction/start', auth, wrap(async req => { market.startAuction(req.user, String(req.body.cardId), req.body.start, req.body.hours, req.body.buyout); return done(req); }));
+app.post('/api/auction/bid', auth, wrap(async req => ({ ...market.placeBid(req.user, String(req.body.id), req.body.amount), ...done(req) })));
+app.post('/api/auction/cancel', auth, wrap(async req => { market.cancelAuction(req.user, String(req.body.id)); return done(req); }));
+app.get('/api/player/:name/cards', auth, wrap(async req => market.playerCards(req.params.name)));
+app.post('/api/trade/propose', auth, wrap(async req => { market.proposeTrade(req.user, req.body.to, req.body.give, req.body.want, req.body.message); return done(req); }));
+app.post('/api/trade/answer', auth, wrap(async req => { market.answerTrade(req.user, String(req.body.id), !!req.body.accept); return done(req); }));
 
 // ---------- Boss, thème, classements ----------
 app.get('/api/boss', auth, wrap(async req => {

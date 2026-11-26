@@ -6,7 +6,7 @@ avec des attaques tirées du sujet de la page.
 
 Chaque carte reçoit :
 
-- **un personnage pixel art** : la tête vient de l'image de la page (pixelisée), et le corps dépend du sujet.
+- **un personnage pixel art** : la tête montre la vraie photo de la page (nette), et le corps en pixel art dépend du sujet.
   Un footballeur porte un maillot et un ballon, un chanteur un micro, une commune devient un golem de pierre, un oiseau a un bec et des pattes…
 - **un type** (Politique, Histoire, Science, Tech, Nature, Géographie, Guerre, Art, Sport, Mythe, Quotidien), déduit de la description et des catégories ;
 - **une rareté** selon la popularité de la page (vues sur un an) ;
@@ -160,6 +160,19 @@ Les pages au contenu sensible ne sortent **jamais** des packs : sexualité, atte
 Les noms d'attaques sont aussi filtrés : jamais de religion, d'origine, de handicap ou de mort utilisés comme « attaque ».
 Le filtre couvre les 6 langues. Les listes sont dans `src/filter.js`.
 
+## Marché, enchères et échanges
+
+Le bouton **Marché** (en haut, ou sur l'accueil) ouvre 4 onglets :
+
+- **Marché** : achète des cartes à prix fixe aux autres joueurs.
+- **Enchères** : le meilleur enchérisseur à la fin remporte la carte. Les pièces d'une enchère sont bloquées tant qu'on mène, et rendues si quelqu'un surenchérit.
+  Une offre dans les 2 dernières minutes prolonge l'enchère de 2 minutes. Le vendeur peut fixer un prix d'achat immédiat.
+- **Échanges** : propose à un joueur (par son pseudo) des cartes et des pièces contre certaines de ses cartes et de ses pièces. Rien ne bouge tant qu'il n'a pas accepté ; il peut aussi refuser ou contre-proposer.
+- **Vendre** : choisis une de tes cartes et mets-la à prix fixe ou aux enchères (1 h, 6 h, 1 jour ou 3 jours).
+
+Une carte en vente quitte la collection du vendeur et y revient s'il annule ou si personne n'enchérit.
+Chaque vente (marché ou enchères) coûte 5 % de commission au vendeur. Les joueurs reçoivent une notification pour chaque vente, enchère dépassée ou échange.
+
 ## Organisation du code
 
 ```
@@ -171,11 +184,13 @@ src/filter.js          filtre du contenu sensible
 src/pool.js            réserve de cartes remplie en arrière-plan
 src/battle.js          moteur de combat (côté serveur, anti-triche)
 src/modes.js           boss, thèmes du jour
+src/market.js          marché, enchères et échanges entre joueurs
 src/game.js            temps réel (Socket.io) : files d'attente, duels, raids, tour
 src/db.js              sauvegarde (fichier JSON, ou PostgreSQL avec DATABASE_URL)
 public/                le site : écrans, pixel art (js/sprite.js), écran de combat (js/battleview.js)
 public/js/fx.js        animations des attaques (flammes, vague, éclairs, ballon, notes, bulles…), choisies d'après le nom et le type
 public/js/audio.js     synthé 8 bits : bande originale, jingles et bruitages
+public/js/market.js    écran Marché (achat, enchères, échanges, vente)
 render.yaml            configuration de mise en ligne sur Render
 public/shared/types.js règles partagées entre le serveur et le navigateur
 ```
