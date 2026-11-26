@@ -21,6 +21,7 @@ const state = {
   socket: null,
   battle: null,
   lobby: null,
+  duo: null,      // duo en cours (jouer à deux)
   screen: 'home',
 };
 
@@ -51,6 +52,14 @@ function connectSocket() {
   s.on('connect', async () => {
     const r = await emit('battle:resume', {});
     if (r?.view && !state.battle) openBattle({ view: r.view, deadline: r.deadline, meta: r.meta, events: [] });
+    const d = await emit('duo:get', {});
+    setDuo(d && !d.none && !d.error ? d : null);
+  });
+  s.on('duo:update', d => setDuo(d));
+  s.on('duo:notice', ({ msg }) => toast(msg));
+  s.on('duo:nudge', ({ name, mode, vs }) => {
+    if (state.battle) return;
+    toast(`👥 ${name} est prêt : ${duoWhat(mode, vs)}. Va dans ce mode et clique sur le même bouton duo !`);
   });
   s.on('connect_error', err => { if (/non connecté/.test(err.message)) logout(); });
   s.on('profile', p => { state.profile = p; renderTop(); });
@@ -136,6 +145,7 @@ function topbar() {
     h('span', { class: 'spacer' }),
     h('span', { class: 'chip coin', title: 'Pièces' }, '🪙 ', fmt(p.coins)),
     h('span', { class: 'chip', title: 'Cartes différentes' }, '🃏 ', p.cardCount),
+    state.duo ? h('button', { class: 'btn small duo-chip', onclick: () => go('duo'), title: 'Ton duo' }, '👥 ', state.duo.members.find(m => m.id !== p.id)?.name || 'Duo') : null,
     h('button', { class: 'btn small', onclick: () => go('collection') }, 'Collection'),
     h('button', { class: 'btn small cyan', onclick: () => go('market') }, 'Marché'),
     h('button', { class: 'btn small gold', onclick: () => go('packs') }, 'Packs' + (p.starterPacks > 0 || Date.now() > p.freePackAt ? ' !' : '')),
@@ -207,6 +217,7 @@ SCREENS.home = async body => {
     tile('boss', MODES.boss.emoji, 'Mode Boss', bossInfo, () => go('boss')),
     tile('tower', MODES.tower.emoji, 'Tour infinie', `${MODES.tower.desc} Ton record : étage ${p.stats.towerBest}.`, () => go('tower')),
     tile('theme', MODES.theme.emoji, 'Thème du jour', themeInfo, () => go('duel', { mode: 'theme' })),
+    tile('duo', '👥', 'Jouer à deux', state.duo ? `Ton duo : ${state.duo.members.map(m => m.name).join(' & ')}` : 'Fais équipe avec un ami dans tous les modes : tour, boss, duels…', () => go('duo')),
     tile('', '🏪', 'Marché & échanges', 'Vends tes cartes, enchéris et échange avec les autres joueurs.', () => go('market')),
     tile('', '🏆', 'Classements', `Classement : ${p.stats.rating} pts · ${p.stats.wins} victoires`, () => go('leaderboard')),
   ));
@@ -516,6 +527,7 @@ SCREENS.duel = async (body, { mode }) => {
     h('div', { class: 'row', style: { marginTop: '12px' } }, h('span', {}, 'Rejoindre un ami :'), codeInput,
       h('button', { class: 'btn small', onclick: async () => { const t = team(); if (!t) return; const r = await emit('duel:join', { code: codeInput.value, team: t }); if (r.error) toast(r.error, true); } }, 'Rejoindre')));
   wrap.insertBefore(actions, picker ? picker.el : null);
+  wrap.insertBefore(duoPanel(mode, team), picker ? picker.el : null);
 };
 
 let closeWaitingFn = null;
@@ -577,7 +589,7 @@ SCREENS.boss = async body => {
       b.lobbies.length ? [h('h3', { style: { marginTop: '14px' } }, 'Groupes ouverts'),
         h('div', { class: 'list' }, b.lobbies.map(l => h('div', { class: 'li' }, h('span', {}, `${l.members.map(m => m.name).join(', ')} (${l.members.length}/4)`), h('button', { class: 'btn small', onclick: () => join(l.code) }, 'Rejoindre'))))] : null));
   }
-  wrap.append(picker.el);
+  wrap.append(duoPanel('boss', team), picker.el);
 };
 
 // --- Tour infinie ---
@@ -589,31 +601,143 @@ SCREENS.tower = async body => {
   wrap.append(h('h2', {}, '🗼 Tour infinie'),
     h('div', { class: 'panel' },
       h('p', {}, 'Monte le plus haut possible avec la même équipe. Les gardiens deviennent plus nombreux et plus rares à chaque étage. Entre deux étages, tes cartes récupèrent 30 % de leurs PV, mais les cartes K.O. le restent.'),
-      h('p', { class: 'muted' }, `Ton record : étage ${state.profile.stats.towerBest} · Chaque étage rapporte 10 × son numéro en pièces.`)));
+      h('p', { class: 'muted' }, `Ton record : étage ${state.profile.stats.towerBest} en solo, étage ${state.profile.stats.towerDuoBest || 0} à deux · Chaque étage rapporte 10 × son numéro en pièces. À deux, il y a un gardien par joueur.`)));
+  const picker = teamPicker('tower');
+  const team = () => { if (!picker.ok()) { toast(`Choisis ${TEAM_SIZE} cartes.`, true); return null; } return picker.get(); };
   if (status && !status.none) {
     wrap.append(h('div', { class: 'panel', style: { marginTop: '16px' } },
-      h('h3', {}, `Ascension en cours : étage ${status.floor}`),
+      h('h3', {}, `Ascension en solo en cours : étage ${status.floor}`),
       h('div', { class: 'list' }, status.team.map(f => h('div', { class: 'li' }, h('span', {}, f.title), h('span', {}, f.fainted ? 'K.O.' : `${f.hp}/${f.maxHp} PV`)))),
       h('div', { class: 'row', style: { marginTop: '12px' } },
         h('button', { class: 'btn gold', onclick: nextFloor }, 'Étage suivant ▶'),
         h('button', { class: 'btn ghost', onclick: async () => { await emit('tower:quit', {}); render(); } }, 'Abandonner l\'ascension'))));
-    return;
+  } else {
+    wrap.append(h('div', { class: 'panel', style: { marginTop: '16px' } },
+      h('h3', { style: { margin: '0 0 8px' } }, '🧍 En solo'),
+      h('button', { class: 'btn primary', onclick: async () => {
+        const t = team(); if (!t) return;
+        showWaiting('Ouverture des portes de la tour');
+        const r = await emit('tower:start', { team: t });
+        if (r.error) { closeWaiting(); toast(r.error, true); }
+      } }, 'Commencer l\'ascension')));
   }
-  const picker = teamPicker('tower');
-  wrap.append(h('div', { class: 'row', style: { marginTop: '16px' } },
-    h('button', { class: 'btn primary', onclick: async () => {
-      if (!picker.ok()) return toast(`Choisis ${TEAM_SIZE} cartes.`, true);
-      showWaiting('Ouverture des portes de la tour');
-      const r = await emit('tower:start', { team: picker.get() });
-      if (r.error) { closeWaiting(); toast(r.error, true); }
-    } }, 'Commencer l\'ascension')), picker.el);
+  wrap.append(duoPanel('tower', team), picker.el);
 };
+
+async function duoNextFloor() {
+  showWaiting('Montée à l\'étage suivant');
+  const r = await emit('duo:tower:next', {});
+  if (r.error) { closeWaiting(); toast(r.error, true); go('tower'); }
+}
 
 async function nextFloor() {
   showWaiting('Montée à l\'étage suivant');
   const r = await emit('tower:next', {});
   if (r.error) { closeWaiting(); toast(r.error, true); go('tower'); }
 }
+
+// --- Jouer à deux ---
+const DUO_LABEL = { normal: 'Mode Normal', master: 'Mode Master', theme: 'Thème du jour', boss: 'Boss', tower: 'Tour infinie' };
+const DUO_SCREEN = { normal: ['duel', { mode: 'normal' }], master: ['duel', { mode: 'master' }], theme: ['duel', { mode: 'theme' }], boss: ['boss', {}], tower: ['tower', {}] };
+const vsLabel = vs => (vs === 'bot' ? 'contre l\'ordinateur' : vs === 'online' ? 'contre un autre duo' : '');
+const duoWhat = (mode, vs) => DUO_LABEL[mode] + (vs ? ' ' + vsLabel(vs) : '');
+const duoListeners = new Set();
+function setDuo(d) {
+  const before = JSON.stringify(state.duo?.members.map(m => m.name) || null);
+  state.duo = d;
+  renderTop();
+  for (const fn of [...duoListeners]) fn();
+  // La tuile « Jouer à deux » de l'accueil affiche le duo : on la met à jour quand il change.
+  if (state.screen === 'home' && !state.battle && before !== JSON.stringify(d?.members.map(m => m.name) || null)) render();
+}
+
+// Panneau « Jouer à deux » : créer ou rejoindre un duo, puis se dire prêt pour ce mode.
+function duoPanel(mode, getTeam) {
+  const box = h('div', { class: 'panel duo-panel' });
+  let mounted = false;
+  const draw = () => {
+    if (mounted && !box.isConnected) { duoListeners.delete(draw); return; }
+    mounted = true;
+    box.replaceChildren(...duoContent(mode, getTeam));
+  };
+  duoListeners.add(draw);
+  draw();
+  return box;
+}
+
+function duoContent(mode, getTeam) {
+  const d = state.duo, meId = state.profile.id;
+  const title = h('h3', { style: { margin: '0 0 8px' } }, '👥 Jouer à deux');
+  if (!d) {
+    const code = h('input', { class: 'field', placeholder: 'CODE', maxlength: 4, style: { width: '120px', textTransform: 'uppercase' } });
+    const join = async () => { const r = await emit('duo:join', { code: code.value }); if (r.error) return toast(r.error, true); setDuo(r); };
+    code.onkeydown = e => { if (e.key === 'Enter') join(); };
+    return [title, h('p', { class: 'muted', style: { margin: '0 0 10px' } }, 'Fais équipe avec un ami : vous combattez côte à côte, chacun avec ses propres cartes.'),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn cyan', onclick: async () => { const r = await emit('duo:create', {}); if (r.error) return toast(r.error, true); setDuo(r); } }, 'Créer un duo'),
+        h('span', {}, 'ou rejoindre :'), code, h('button', { class: 'btn small', onclick: join }, 'Rejoindre'))];
+  }
+  const mate = d.members.find(m => m.id !== meId);
+  const me = d.members.find(m => m.id === meId);
+  const out = [title, h('div', { class: 'row' }, 'Code du duo :', h('span', { class: 'code' }, d.code),
+    mate ? h('span', {}, 'avec ', h('b', {}, mate.name)) : h('span', { class: 'muted dots' }, 'Donne ce code à ton ami'),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'btn small ghost', onclick: async () => { await emit('duo:leave', {}); setDuo(null); } }, 'Quitter le duo'))];
+  if (!mate) return out;
+  const status = m => (m.inBattle ? '⚔️ en combat' : m.ready ? `✅ prêt : ${duoWhat(m.ready.mode, m.ready.vs)}` : '… pas encore prêt');
+  out.push(h('div', { class: 'list', style: { margin: '10px 0' } },
+    d.members.map(m => h('div', { class: 'li' }, h('b', {}, m.id === meId ? `${m.name} (toi)` : m.name), h('span', { class: 'muted' }, status(m))))));
+  if (d.queued) out.push(h('p', { class: 'dots' }, `Recherche d'un autre duo (${DUO_LABEL[d.queued]})`));
+  if (mode === 'any') {
+    if (mate.ready && !me.ready) {
+      const [screen, params] = DUO_SCREEN[mate.ready.mode];
+      out.push(h('button', { class: 'btn gold', onclick: () => go(screen, params) }, `Rejoindre ${mate.name} : ${DUO_LABEL[mate.ready.mode]}`));
+    }
+    return out;
+  }
+  const ready = async vs => {
+    const team = getTeam ? getTeam() : [];
+    if (team === null) return;
+    const r = await emit('duo:ready', { mode, vs, team });
+    if (r.error) return toast(r.error, true);
+    if (r.waiting) toast(`C'est noté ! ${mate.name} doit maintenant cliquer sur le même bouton.`);
+    else if (r.queued) toast('Recherche d\'un autre duo…');
+  };
+  const row = h('div', { class: 'row' });
+  if (me.ready || d.queued) row.append(h('button', { class: 'btn ghost', onclick: () => emit('duo:unready', {}) }, 'Annuler'));
+  else if (mode === 'tower') {
+    if (d.tower) {
+      out.push(h('h3', {}, `Ascension à deux en cours : étage ${d.tower.floor}`),
+        h('div', { class: 'duo-teams' }, d.tower.members.map(m => h('div', { class: 'list' }, h('b', {}, m.name),
+          m.team.map(f => h('div', { class: 'li' }, h('span', {}, f.title), h('span', {}, f.fainted ? 'K.O.' : `${f.hp}/${f.maxHp} PV`)))))));
+      row.append(h('button', { class: 'btn gold', onclick: duoNextFloor }, 'Étage suivant à deux ▶'),
+        h('button', { class: 'btn ghost', onclick: () => emit('duo:tower:quit', {}) }, 'Abandonner l\'ascension à deux'));
+    } else row.append(h('button', { class: 'btn primary', onclick: () => ready(null) }, 'Commencer l\'ascension à deux'));
+  } else if (mode === 'boss') row.append(h('button', { class: 'btn primary', onclick: () => ready(null) }, '👹 Affronter le boss à deux'));
+  else row.append(h('button', { class: 'btn cyan', onclick: () => ready('bot') }, '🤖 À deux contre l\'ordinateur'),
+    h('button', { class: 'btn primary', onclick: () => ready('online') }, '🌐 Contre un autre duo'));
+  out.push(row);
+  if (!(mode === 'tower' && d.tower)) out.push(h('p', { class: 'muted', style: { fontSize: '18px', margin: '8px 0 0' } },
+    mode === 'master' ? 'Le combat commence quand vous avez cliqué tous les deux sur le même bouton. En Master, pas besoin d\'équipe.'
+      : 'Choisis ton équipe plus bas. Le combat commence quand vous avez cliqué tous les deux sur le même bouton.'));
+  return out;
+}
+
+SCREENS.duo = body => {
+  const wrap = h('div', { class: 'wrap' });
+  body.append(wrap);
+  wrap.append(h('h2', {}, '👥 Jouer à deux'),
+    h('p', { class: 'muted' }, 'Crée un duo et donne le code à ton ami (ou entre le sien). Ensuite, allez dans le même mode et cliquez sur le même bouton duo : vous combattez côte à côte, chacun avec ses cartes.'),
+    duoPanel('any'),
+    h('h3', { style: { marginTop: '18px' } }, 'Les modes à deux'),
+    h('div', { class: 'hub' }, ['tower', 'boss', 'normal', 'master', 'theme'].map(m => {
+      const [screen, params] = DUO_SCREEN[m];
+      const desc = { tower: 'Montez ensemble : un gardien par joueur à chaque étage.', boss: 'Battez le boss des 30 minutes à deux.',
+        normal: 'À deux contre deux bots, ou contre un autre duo.', master: 'Chacun ouvre ses cartes au hasard pendant le combat.',
+        theme: 'Avec les cartes du thème du jour, récompenses ×1,5.' }[m];
+      return h('div', { class: 'panel tile', onclick: () => go(screen, params) }, h('div', { class: 'emoji' }, MODES[m].emoji), h('h3', {}, DUO_LABEL[m] + ' à deux'), h('p', {}, desc));
+    })));
+};
 
 // --- Classements ---
 SCREENS.leaderboard = async body => {
@@ -623,7 +747,7 @@ SCREENS.leaderboard = async body => {
   const list = (title, rows, unit) => h('div', { class: 'panel' }, h('h3', {}, title),
     rows.length ? h('div', { class: 'list' }, rows.map((r, i) => h('div', { class: 'li' }, h('span', {}, `${i + 1}. ${r.name}`), h('b', {}, `${r.value} ${unit}`)))) : h('p', { class: 'muted' }, 'Personne pour l\'instant.'));
   wrap.append(h('h2', {}, '🏆 Classements'), h('div', { class: 'lb-grid' },
-    list('Duels en ligne', lb.rating, 'pts'), list('Tour infinie', lb.tower, 'ét.'), list('Boss vaincus', lb.boss, ''),
+    list('Duels en ligne', lb.rating, 'pts'), list('Tour infinie', lb.tower, 'ét.'), list('Tour à deux', lb.towerDuo || [], 'ét.'), list('Boss vaincus', lb.boss, ''),
     list('Thème du jour', lb.theme, 'vict.'), list('Collectionneurs', lb.cards, 'cartes')));
 };
 
@@ -635,7 +759,7 @@ SCREENS.battle = body => {
   state.battle = mountBattle(host, state.battleInit, {
     emit,
     onExit: meta => { refreshCollection(); go(meta?.kind === 'boss' ? 'boss' : meta?.kind === 'tower' ? 'tower' : 'home'); },
-    onNextFloor: () => { nextFloor(); },
+    onNextFloor: meta => { meta?.duo ? duoNextFloor() : nextFloor(); },
   });
 };
 

@@ -67,7 +67,7 @@ export class Battle {
     }
     for (let i = 0; i < this.sides.length; i++) {
       const f = this.activeOf(i);
-      if (f) events.push({ t: 'enter', side: i, fighter: fv(f), msg: this.sides[i].boss ? `Le boss ${f.card.title} apparaît !` : `${this.sides[i].name} envoie ${f.card.title} !` });
+      if (f) events.push({ t: 'enter', side: i, fighter: fv(f), msg: this.sides[i].boss ? `Le boss ${f.card.title} apparaît !` : f.fainted ? `${this.sides[i].name} n'a plus de carte en état de se battre.` : `${this.sides[i].name} envoie ${f.card.title} !` });
     }
     return events;
   }

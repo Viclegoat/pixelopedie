@@ -325,3 +325,9 @@ input.field:focus { border-color: var(--cyan); }
 @media (max-width: 640px) { .trade-grid, .trade-cols { grid-template-columns: 1fr; } .trade-arrow { transform: rotate(90deg); justify-self: center; } }
 .cards.pick .empty, .cards .empty { grid-column: 1 / -1; }
 .cards.pick .empty { padding: 16px; }
+
+/* ---------- Jouer à deux ---------- */
+.duo-panel { margin-top: 16px; border-color: #1d8fb8; background: linear-gradient(160deg, #10304a, var(--panel)); }
+.duo-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.tile.duo { background: linear-gradient(160deg, #10304a, var(--panel)); }
+.btn.duo-chip { background: #1d8fb8; }

@@ -15,6 +15,12 @@ const queues = { normal: [], master: [], theme: [] };
 const duels = new Map();       // code -> { mode, hostId, team }
 const lobbies = new Map();     // code -> raid de boss en préparation
 const towers = new Map();      // userId -> run en cours
+// Duos : deux amis qui jouent ensemble, dans le même camp, dans tous les modes.
+const parties = new Map();     // code -> { code, members: [userId], ready: { userId: { mode, vs, fighters } } }
+const userParty = new Map();   // userId -> code du duo
+const duoQueues = { normal: [], master: [], theme: [] }; // duos qui cherchent un autre duo : { code, members }
+const duoTowers = new Map();   // code du duo -> { floor, members: [{ user, fighters }], starting }
+const DUO_MODES = ['normal', 'master', 'theme', 'boss', 'tower'];
 
 const code4 = () => crypto.randomBytes(3).toString('hex').slice(0, 4).toUpperCase();
 const toUser = (userId, ev, data) => io.to('u:' + userId).emit(ev, data);
@@ -54,7 +60,8 @@ async function botTeam(rarity, size = TEAM_SIZE, statMult = 1) {
 }
 
 function busy(userId) {
-  return userBattle.has(userId) || Object.values(queues).some(q => q.some(e => e.userId === userId));
+  return userBattle.has(userId) || Object.values(queues).some(q => q.some(e => e.userId === userId))
+    || Object.values(duoQueues).some(q => q.some(e => e.members.some(m => m.user.id === userId)));
 }
 function leaveQueues(userId) {
   for (const q of Object.values(queues)) { const i = q.findIndex(e => e.userId === userId); if (i >= 0) q.splice(i, 1); }
@@ -68,6 +75,7 @@ async function startBattle({ mode, sides, rules = {}, onEnd, meta = {} }) {
   const entry = { battle, onEnd, meta, timer: null, deadline: 0, busy: false };
   battles.set(id, entry);
   sides.forEach(s => { if (s.pid) userBattle.set(s.pid, id); });
+  sides.forEach(s => { const p = s.pid && partyOf(s.pid); if (p) { delete p.ready[s.pid]; partyBroadcast(p); } });
   const events = await battle.start();
   schedule(entry);
   broadcast(entry, 'battle:start', events);
@@ -160,7 +168,7 @@ function duelRewards(mode, vsBot) {
       const cards = mode === 'master' && win ? s.team.map(f => db.cards[f.card.id]).filter(Boolean) : [];
       if (mode === 'master' && win) coins += 20;
       if (win) user.stats.wins++; else if (won) user.stats.losses++;
-      if (!vsBot && humans.length === 2 && won) user.stats.rating = Math.max(0, user.stats.rating + (win ? 20 : -15));
+      if (!vsBot && new Set(humans.map(x => x.faction)).size === 2 && won) user.stats.rating = Math.max(0, user.stats.rating + (win ? 20 : -15));
       if (mode === 'theme' && win) {
         const t = todayTheme().id;
         user.theme[t] = user.theme[t] || { claimed: false, wins: 0 };
@@ -179,12 +187,15 @@ const masterRules = () => ({
 
 async function startDuel(mode, a, b) {
   // a, b : { user, fighters } ; b.user peut être null (bot)
-  const vsBot = !b.user;
-  const sides = [
-    { pid: a.user.id, name: a.user.name, faction: 'A', team: a.fighters },
-    { pid: b.user?.id || null, name: b.user?.name || b.name, faction: 'B', team: b.fighters, bot: vsBot },
-  ];
-  return startBattle({ mode, sides, rules: mode === 'master' ? masterRules() : {}, onEnd: duelRewards(mode, vsBot), meta: { kind: 'duel' } });
+  return startTeams(mode, [a], [b]);
+}
+
+// Combat entre deux camps d'un ou plusieurs joueurs (2 contre 2 pour les duos).
+async function startTeams(mode, teamA, teamB) {
+  const vsBot = teamB.every(x => !x.user);
+  const side = (x, faction) => ({ pid: x.user?.id || null, name: x.user?.name || x.name, faction, team: x.fighters, bot: !x.user });
+  const sides = [...teamA.map(x => side(x, 'A')), ...teamB.map(x => side(x, 'B'))];
+  return startBattle({ mode, sides, rules: mode === 'master' ? masterRules() : {}, onEnd: duelRewards(mode, vsBot), meta: { kind: 'duel', duo: sides.length > 2 } });
 }
 
 async function botOpponent(mode, fighters) {
@@ -240,6 +251,110 @@ async function startTowerFloor(user) {
     },
   });
   return entry;
+}
+
+async function startDuoTowerFloor(code) {
+  const run = duoTowers.get(code);
+  const spec = floorSpec(run.floor);
+  const sides = run.members.map(m => {
+    for (const f of m.fighters) { f.stages = { atk: 0, def: 0, spd: 0 }; f.status = null; }
+    return { pid: m.user.id, name: m.user.name, faction: 'A', team: m.fighters, active: Math.max(0, m.fighters.findIndex(f => !f.fainted)) };
+  });
+  // Deux gardiens par étage : un pour chaque joueur.
+  for (const where of ['de gauche', 'de droite']) {
+    sides.push({ pid: null, name: `Gardien ${where}`, faction: 'B', team: await botTeam(spec.rarity, spec.size, spec.statMult), bot: true });
+  }
+  return startBattle({
+    mode: 'tower', sides, meta: { kind: 'tower', floor: run.floor, duo: true },
+    onEnd: battle => {
+      const win = battle.winner === 'A';
+      const floor = run.floor;
+      if (win) {
+        run.floor++;
+        for (const m of run.members) for (const f of m.fighters) if (!f.fainted) f.hp = Math.min(f.maxHp, f.hp + Math.round(f.maxHp * 0.3));
+      } else if (duoTowers.get(code) === run) duoTowers.delete(code);
+      const out = {};
+      for (const side of battle.sides) {
+        const user = side.pid && db.users[side.pid];
+        if (!user) continue;
+        const o = { floor, win, duo: true };
+        if (win && run.members.some(m => m.user.id === user.id)) {
+          Object.assign(o, give(user, { coins: 10 * floor }));
+          user.stats.towerDuoBest = Math.max(user.stats.towerDuoBest || 0, floor);
+          o.next = run.floor;
+        } else Object.assign(o, { coins: 0, cards: [], ended: true });
+        o.best = user.stats.towerDuoBest || 0;
+        out[user.id] = o;
+      }
+      const p = parties.get(code);
+      if (p) setImmediate(() => partyBroadcast(p));
+      return out;
+    },
+  });
+}
+
+// ---------- Duos ----------
+function partyOf(uid) { const c = userParty.get(uid); return c ? parties.get(c) || null : null; }
+function partyView(p) {
+  const run = duoTowers.get(p.code);
+  return {
+    code: p.code,
+    members: p.members.map(id => ({ id, name: db.users[id]?.name || '?', inBattle: userBattle.has(id),
+      ready: p.ready[id] ? { mode: p.ready[id].mode, vs: p.ready[id].vs } : null })),
+    queued: Object.entries(duoQueues).find(([, q]) => q.some(e => e.code === p.code))?.[0] || null,
+    tower: run ? { floor: run.floor, members: run.members.map(m => ({ name: m.user.name,
+      team: m.fighters.map(f => ({ title: f.card.title, hp: f.hp, maxHp: f.maxHp, fainted: f.fainted })) })) } : null,
+  };
+}
+function partyBroadcast(p) {
+  if (!p || !parties.has(p.code)) return;
+  const v = partyView(p);
+  p.members.forEach(id => toUser(id, 'duo:update', v));
+}
+function leaveDuoQueue(code) {
+  for (const q of Object.values(duoQueues)) { const i = q.findIndex(e => e.code === code); if (i >= 0) q.splice(i, 1); }
+}
+function leaveParty(uid) {
+  const p = partyOf(uid);
+  userParty.delete(uid);
+  toUser(uid, 'duo:update', null);
+  if (!p) return;
+  leaveDuoQueue(p.code);
+  duoTowers.delete(p.code);
+  p.members = p.members.filter(id => id !== uid);
+  p.ready = {};
+  if (!p.members.length) { parties.delete(p.code); return; }
+  partyBroadcast(p);
+  p.members.forEach(id => toUser(id, 'duo:notice', { msg: `${db.users[uid]?.name || 'Ton ami'} a quitté le duo.` }));
+}
+
+async function launchDuo(p, mode, vs, members) {
+  if (mode === 'tower') {
+    duoTowers.set(p.code, { floor: 1, members });
+    await startDuoTowerFloor(p.code);
+    return { started: true };
+  }
+  if (mode === 'boss') { await startRaid(members); return { started: true }; }
+  if (vs === 'bot') {
+    const bots = [];
+    for (const [k, m] of members.entries()) {
+      const b = await botOpponent(mode, m.fighters);
+      bots.push({ ...b, name: k ? 'Bot Wikidata' : 'Bot Encyclopédique' });
+    }
+    await startTeams(mode, members, bots);
+    return { started: true };
+  }
+  // Contre un autre duo en ligne.
+  const q = duoQueues[mode];
+  const other = q.find(e => e.code !== p.code && parties.has(e.code) && !e.members.some(m => userBattle.has(m.user.id)));
+  if (other) {
+    q.splice(q.indexOf(other), 1);
+    await startTeams(mode, other.members, members);
+    partyBroadcast(parties.get(other.code));
+    return { started: true };
+  }
+  q.push({ code: p.code, members, at: Date.now() });
+  return { queued: true };
 }
 
 // ---------- Raids de boss ----------
@@ -344,7 +459,11 @@ export function attach(server) {
         toUser(uid, 'battle:end', { view: entry.battle.view(i), rewards: null, meta: entry.meta });
         if (entry.battle.allReady()) step(entry);
       }
-      if (entry.meta.kind === 'tower') towers.delete(uid);
+      if (entry.meta.kind === 'tower' && entry.meta.duo) {
+        // Tour à deux : celui qui abandonne quitte l'ascension, son ami continue.
+        const p = partyOf(uid), run = p && duoTowers.get(p.code);
+        if (run) { run.members = run.members.filter(m => m.user.id !== uid); if (!run.members.length) duoTowers.delete(p.code); partyBroadcast(p); }
+      } else if (entry.meta.kind === 'tower') towers.delete(uid);
     }));
 
     // --- Duels (Normal, Master, Thème) ---
@@ -465,11 +584,102 @@ export function attach(server) {
       return run ? { floor: run.floor, team: run.fighters.map(f => ({ title: f.card.title, hp: f.hp, maxHp: f.maxHp, fainted: f.fainted })) } : { none: true };
     }));
 
+    // --- Duo : jouer à deux ---
+    socket.on('duo:get', guard(async () => { const p = partyOf(uid); return p ? partyView(p) : { none: true }; }));
+
+    socket.on('duo:create', guard(async () => {
+      if (busy(uid)) throw new Error('Tu es déjà en combat ou en file');
+      leaveParty(uid);
+      let code; do { code = code4(); } while (parties.has(code) || duels.has(code) || lobbies.has(code));
+      const p = { code, members: [uid], ready: {} };
+      parties.set(code, p);
+      userParty.set(uid, code);
+      partyBroadcast(p);
+      return partyView(p);
+    }));
+
+    socket.on('duo:join', guard(async ({ code }) => {
+      code = String(code || '').toUpperCase().trim();
+      const p = parties.get(code);
+      if (!p) throw new Error('Duo introuvable : vérifie le code');
+      if (p.members.includes(uid)) return partyView(p);
+      if (p.members.length >= 2) throw new Error('Ce duo est déjà complet');
+      if (busy(uid)) throw new Error('Tu es déjà en combat ou en file');
+      leaveParty(uid);
+      p.members.push(uid);
+      userParty.set(uid, code);
+      p.ready = {};
+      leaveDuoQueue(code);
+      partyBroadcast(p);
+      p.members.filter(id => id !== uid).forEach(id => toUser(id, 'duo:notice', { msg: `${me().name} a rejoint ton duo !` }));
+      return partyView(p);
+    }));
+
+    socket.on('duo:leave', guard(async () => { leaveParty(uid); }));
+
+    socket.on('duo:unready', guard(async () => {
+      const p = partyOf(uid);
+      if (!p) return;
+      p.ready = {};
+      leaveDuoQueue(p.code);
+      partyBroadcast(p);
+    }));
+
+    socket.on('duo:ready', guard(async ({ mode, vs, team }) => {
+      const p = partyOf(uid);
+      if (!p) throw new Error("Tu n'es pas dans un duo");
+      if (!DUO_MODES.includes(mode)) throw new Error('Mode inconnu');
+      if (p.members.length < 2) throw new Error('Attends que ton ami rejoigne le duo');
+      if (busy(uid)) throw new Error('Tu es déjà en combat ou en file');
+      const duel = ['normal', 'master', 'theme'].includes(mode);
+      if (duel && !['bot', 'online'].includes(vs)) throw new Error('Choisis un adversaire');
+      if (mode === 'tower' && duoTowers.has(p.code)) throw new Error('Votre ascension à deux est déjà en cours');
+      leaveQueues(uid);
+      const fighters = mode === 'master' ? [] : buildTeam(me(), team, { theme: mode === 'theme' });
+      const mine = { mode, vs: duel ? vs : null, fighters };
+      p.ready[uid] = mine;
+      const mate = p.members.find(id => id !== uid);
+      const o = p.ready[mate];
+      if (!o || o.mode !== mode || o.vs !== mine.vs) {
+        partyBroadcast(p);
+        toUser(mate, 'duo:nudge', { name: me().name, mode, vs: mine.vs });
+        return { waiting: true };
+      }
+      if (p.members.some(id => userBattle.has(id))) { partyBroadcast(p); throw new Error('Ton ami est encore en combat'); }
+      const ready = p.ready;
+      p.ready = {};
+      const members = p.members.map(id => ({ user: db.users[id], fighters: ready[id].fighters }));
+      const r = await launchDuo(p, mode, mine.vs, members);
+      partyBroadcast(p);
+      return r;
+    }));
+
+    socket.on('duo:tower:next', guard(async () => {
+      const p = partyOf(uid);
+      const run = p && duoTowers.get(p.code);
+      if (!run) throw new Error('Aucune ascension à deux en cours');
+      if (run.starting || run.members.some(m => userBattle.has(m.user.id))) return { already: true };
+      if (!run.members.some(m => m.fighters.some(f => !f.fainted))) { duoTowers.delete(p.code); partyBroadcast(p); throw new Error('Vos équipes sont K.O.'); }
+      run.starting = true;
+      try { await startDuoTowerFloor(p.code); } finally { run.starting = false; }
+      partyBroadcast(p);
+      return { started: true };
+    }));
+
+    socket.on('duo:tower:quit', guard(async () => {
+      const p = partyOf(uid);
+      if (!p) return;
+      duoTowers.delete(p.code);
+      partyBroadcast(p);
+    }));
+
     socket.on('disconnect', () => {
       // On retire le joueur des files d'attente ; un combat en cours continue (le temps joue pour lui).
       const still = io.sockets.adapter.rooms.get('u:' + uid);
       if (!still || !still.size) {
         for (const q of Object.values(queues)) { const i = q.findIndex(e => e.userId === uid); if (i >= 0) q.splice(i, 1); }
+        const p = partyOf(uid);
+        if (p && (p.ready[uid] || duoQueues && Object.values(duoQueues).some(q => q.some(e => e.code === p.code)))) { p.ready = {}; leaveDuoQueue(p.code); partyBroadcast(p); }
       }
     });
   });

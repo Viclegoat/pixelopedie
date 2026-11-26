@@ -87,6 +87,16 @@ Avec une clé, chaque nouvelle carte coûte un petit appel à l'API. Les cartes 
 | 🗼 **Tour infinie** | Monte d'étage en étage avec la même équipe. Les gardiens sont plus nombreux et plus rares à chaque étage. Entre deux étages, tes cartes récupèrent 30 % de leurs PV, mais les cartes K.O. le restent. | 10 × le numéro de l'étage, et ton record au classement. |
 | 📅 **Thème du jour** | Chaque jour un thème (Oiseaux, Pilotes de F1, Châteaux de la Loire, Dieux égyptiens…). Seules les cartes de ce thème sont autorisées. | Un pack gratuit de 3 cartes du thème par jour, récompenses ×1,5 et un classement du jour. |
 
+### Jouer à deux
+
+Tous les modes se jouent aussi à deux, côte à côte, chacun avec ses propres cartes.
+Un joueur crée un **duo** (bouton « Jouer à deux » sur l'accueil, ou dans chaque mode) et donne le code à 4 caractères à son ami.
+Ensuite, les deux vont dans le même mode, choisissent leur équipe et cliquent sur le même bouton duo : le combat démarre quand les deux sont prêts.
+
+- **Tour à deux** : un gardien par joueur à chaque étage. Si toutes les cartes d'un joueur sont K.O., son ami peut continuer l'ascension. Record séparé (« Tour à deux » au classement).
+- **Boss à deux** : le raid du boss des 30 minutes, à deux.
+- **Normal, Master et Thème à deux** : à deux contre deux bots, ou contre un autre duo en ligne (2 contre 2, avec points de classement).
+
 Les packs coûtent 100 pièces. Un pack gratuit est offert toutes les 4 heures, et chaque nouveau joueur reçoit 2 packs de départ et 300 pièces.
 Un pack contient 4 cartes au hasard et 1 carte Rare ou mieux (25 % d'Épique, 12 % de Légendaire, 3 % de Mythique).
 Avoir une carte en double augmente son niveau : +3 % de stats par exemplaire, jusqu'au niveau 10.

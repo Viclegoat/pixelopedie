@@ -213,6 +213,7 @@ app.get('/api/leaderboard', auth, wrap(async () => {
   return {
     rating: top(u => u.stats.rating),
     tower: top(u => u.stats.towerBest),
+    towerDuo: top(u => u.stats.towerDuoBest || 0),
     boss: top(u => u.stats.bossWins),
     theme: top(u => u.theme[t]?.wins || 0),
     cards: top(u => Object.keys(u.collection).length),

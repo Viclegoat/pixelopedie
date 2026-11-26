@@ -400,10 +400,10 @@ export function mountBattle(root, init, ctx) {
       if (rewards.cards?.length) box.append(h('div', {}, `Cartes gagnées : ${rewards.cards.map(c => c.title).join(', ')}`));
       if (rewards.kept) box.append(h('div', { class: 'muted' }, rewards.kept));
       if (meta?.kind === 'boss' && win) box.append(h('div', { class: 'muted' }, rewards.first ? (rewards.dropped ? 'Le boss rejoint ta collection !' : 'Pas de carte cette fois, retente ta chance au prochain boss.') : 'Récompense réduite : tu as déjà battu ce boss.'));
-      if (meta?.kind === 'tower') box.append(h('div', {}, win ? `Étage ${rewards.floor} franchi ! Record : ${rewards.best}` : `Ascension terminée à l'étage ${rewards.floor}. Record : ${rewards.best}`));
+      if (meta?.kind === 'tower') box.append(h('div', {}, win ? `Étage ${rewards.floor} franchi ! Record${meta.duo ? ' à deux' : ''} : ${rewards.best}` : `Ascension terminée à l'étage ${rewards.floor}. Record${meta.duo ? ' à deux' : ''} : ${rewards.best}`));
     }
     const btns = h('div', { class: 'row', style: { justifyContent: 'center' } });
-    if (meta?.kind === 'tower' && win) btns.append(h('button', { class: 'btn gold', onclick: () => ctx.onNextFloor() }, 'Étage suivant ▶'));
+    if (meta?.kind === 'tower' && win) btns.append(h('button', { class: 'btn gold', onclick: () => ctx.onNextFloor(meta) }, 'Étage suivant ▶'));
     btns.append(h('button', { class: 'btn primary', onclick: () => ctx.onExit(meta) }, meta?.kind === 'tower' && win ? 'Arrêter là' : 'Continuer'));
     box.append(btns);
     arena.append(box);
@@ -430,9 +430,9 @@ export function mountBattle(root, init, ctx) {
 }
 
 function titleFor(view, meta) {
-  if (meta?.kind === 'tower') return `Tour infinie — étage ${meta.floor}`;
+  if (meta?.kind === 'tower') return `Tour infinie${meta.duo ? ' à deux' : ''} — étage ${meta.floor}`;
   if (meta?.kind === 'boss') return 'Raid de boss';
-  return `Mode ${MODES[view.mode]?.name || view.mode}`;
+  return `Mode ${MODES[view.mode]?.name || view.mode}${meta?.duo ? ' — à deux' : ''}`;
 }
 
 function shadeBg(hex) {
